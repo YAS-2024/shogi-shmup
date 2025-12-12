@@ -1,0 +1,56 @@
+[
+  {
+    "id": "PATTERN_FU_BASIC",
+    "description": "歩兵: 前方近距離",
+    "range": 3,
+    "interval_ms": 500,
+    "projectiles": [
+      { "angle": 0, "speed": 6 }
+    ]
+  },
+  {
+    "id": "PATTERN_KYO_LONG",
+    "description": "香車: 前方無限射程",
+    "range": 10,
+    "interval_ms": 400,
+    "projectiles": [
+      { "angle": 0, "speed": 10 }
+    ]
+  },
+  {
+    "id": "PATTERN_KEI_JUMP",
+    "description": "桂馬: 前方V字(L字イメージ)",
+    "range": 5,
+    "interval_ms": 600,
+    "projectiles": [
+      { "angle": -20, "speed": 7 },
+      { "angle": 20, "speed": 7 }
+    ]
+  },
+  {
+    "id": "PATTERN_KIN_GOLD",
+    "description": "金将: 前方・横・後方",
+    "range": 3,
+    "interval_ms": 200,
+    "projectiles": [
+      { "angle": 0, "speed": 8 },
+      { "angle": -45, "speed": 8 },
+      { "angle": 45, "speed": 8 },
+      { "angle": -90, "speed": 8 },
+      { "angle": 90, "speed": 8 },
+      { "angle": 180, "speed": 8 }
+    ]
+  },
+  {
+    "id": "PATTERN_HISHA_ROOK",
+    "description": "飛車: 十字貫通",
+    "range": 10,
+    "interval_ms": 150,
+    "projectiles": [
+      { "angle": 0, "speed": 12 },
+      { "angle": 90, "speed": 12 },
+      { "angle": 180, "speed": 12 },
+      { "angle": 270, "speed": 12 }
+    ]
+  }
+]

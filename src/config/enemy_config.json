@@ -1,0 +1,28 @@
+{
+  "enemy_types": [
+    {
+      "id": "ENEMY_FU",
+      "name": "敵歩兵",
+      "hp": 1,
+      "score": 10,
+      "speed": 100,
+      "pattern_id": "PATTERN_FU_BASIC"
+    },
+    {
+      "id": "ENEMY_KYO",
+      "name": "敵香車",
+      "hp": 3,
+      "score": 30,
+      "speed": 200,
+      "pattern_id": "PATTERN_KYO_LONG"
+    },
+    {
+      "id": "ENEMY_KEI",
+      "name": "敵桂馬",
+      "hp": 5,
+      "score": 50,
+      "speed": 150,
+      "pattern_id": "PATTERN_KEI_JUMP"
+    }
+  ]
+}
