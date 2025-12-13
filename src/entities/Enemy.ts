@@ -48,8 +48,7 @@ export class Enemy extends Phaser.GameObjects.Container {
     // ★重要: オフセットは一切設定しない（デフォルトのまま）
     // updateメソッドでの強制上書きで制御するため
   }
-
-  update(time: number, delta: number) {
+  update(_time: number, delta: number) {
     // 移動
     this.y += this.speed * (delta / 1000);
 

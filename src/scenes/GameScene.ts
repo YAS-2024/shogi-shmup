@@ -1,9 +1,8 @@
-// src/scenes/GameScene.ts
-
 import Phaser from 'phaser';
 import { Player } from '../entities/Player';
 import { Enemy } from '../entities/Enemy';
 import { Bullet } from '../entities/Bullet';
+import { Item } from '../entities/Item'; // ★追加: アイテムクラス
 import enemyConfigData from '../config/enemy_config.json';
 import type { EnemyConfigRoot } from '../types/ConfigTypes';
 
@@ -11,35 +10,33 @@ export class GameScene extends Phaser.Scene {
   private player!: Player;
   private enemies!: Phaser.Physics.Arcade.Group;
   private bullets!: Phaser.Physics.Arcade.Group;      // 自機の弾
-  private enemyBullets!: Phaser.Physics.Arcade.Group; // ★追加: 敵の弾
+  private enemyBullets!: Phaser.Physics.Arcade.Group; // 敵の弾
+  private items!: Phaser.Physics.Arcade.Group;        // ★追加: アイテムグループ
   
   private spawnTimer: number = 0;
-  private isGameOver: boolean = false; // ★追加: ゲームオーバーフラグ
+  private isGameOver: boolean = false;
 
   constructor() {
     super('GameScene');
   }
 
- create() {
+  create() {
     this.isGameOver = false;
     this.cameras.main.setBackgroundColor('#444444');
 
-    // ★★★ 追加: 爆発用パーティクルのテクスチャを生成 ★★★
-    // 小さな黄色い丸を作って 'flare' という名前でメモリに登録します
+    // ★爆発用パーティクルのテクスチャを生成
     const graphics = this.add.graphics();
     graphics.fillStyle(0xffaa00, 1); // オレンジ色
     graphics.fillCircle(4, 4, 4);    // 半径4pxの円
-    graphics.generateTexture('flare', 8, 8); // テクスチャ化
-    graphics.destroy(); // 元のgraphicsは不要なので削除
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    
+    graphics.generateTexture('flare', 8, 8);
+    graphics.destroy();
+
     // 1. グループ初期化
     this.bullets = this.physics.add.group({
       classType: Bullet,
       runChildUpdate: true
     });
     
-    // ★追加: 敵の弾グループ
     this.enemyBullets = this.physics.add.group({
       classType: Bullet,
       runChildUpdate: true
@@ -50,34 +47,67 @@ export class GameScene extends Phaser.Scene {
       runChildUpdate: true
     });
 
+    // ★追加: アイテムグループの初期化
+    this.items = this.physics.add.group({
+      classType: Item,
+      runChildUpdate: true
+    });
+
     // 2. 自機生成
     const { width, height } = this.scale;
     this.player = new Player(this, width / 2, height - 100, this.bullets);
 
     // 3. 衝突判定設定
-    // A: 自機の弾 vs 敵 (既存)
-    this.physics.add.overlap(this.bullets, this.enemies, this.handleBulletEnemyCollision, undefined, this);
+    // A: 自機の弾 vs 敵
+    this.physics.add.overlap(
+      this.bullets, 
+      this.enemies, 
+      this.handleBulletEnemyCollision, 
+      undefined, 
+      this
+    );
 
-    // ★追加 B: 敵 vs 自機 (体当たり)
-    this.physics.add.overlap(this.enemies, this.player, this.handlePlayerHit, undefined, this);
+    // B: 敵 vs 自機 (体当たり)
+    this.physics.add.overlap(
+      this.enemies, 
+      this.player, 
+      this.handlePlayerHit, 
+      undefined, 
+      this
+    );
 
-    // ★追加 C: 敵の弾 vs 自機
-    this.physics.add.overlap(this.enemyBullets, this.player, this.handlePlayerHit, undefined, this);
+    // C: 敵の弾 vs 自機
+    this.physics.add.overlap(
+      this.enemyBullets, 
+      this.player, 
+      this.handlePlayerHit, 
+      undefined, 
+      this
+    );
 
-    // 4. イベントリスナー (ゲームオーバー通知を受け取る)
+    // ★追加 D: 自機 vs アイテム
+    this.physics.add.overlap(
+      this.player, 
+      this.items, 
+      this.handlePlayerItemCollision, 
+      undefined, 
+      this
+    );
+
+    // 4. イベントリスナー
     this.events.on('game-over', this.handleGameOver, this);
 
     this.input.setDefaultCursor('none');
   }
 
   update(time: number, delta: number) {
-    // ★ゲームオーバーなら更新を止める（敵のスポーンなどを停止）
     if (this.isGameOver) return;
 
     if (this.player) {
       this.player.update(time, delta);
     }
 
+    // 敵のスポーン処理
     this.spawnTimer += delta;
     if (this.spawnTimer > 1000) {
       this.spawnTestEnemy();
@@ -88,6 +118,7 @@ export class GameScene extends Phaser.Scene {
   private spawnTestEnemy() {
     const configRoot = enemyConfigData as EnemyConfigRoot;
     const enemyData = configRoot.enemy_types.find(e => e.id === 'ENEMY_FU');
+    
     if (enemyData) {
       const x = Phaser.Math.Between(50, this.scale.width - 50);
       const enemy = new Enemy(this, x, -50, enemyData);
@@ -95,48 +126,65 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+// 敵撃破時の処理
   private handleBulletEnemyCollision(obj1: any, obj2: any) {
     const bullet = obj1 as Bullet;
     const enemy = obj2 as Enemy;
+
     if (bullet.active && enemy.active) {
       bullet.destroy();
       const isDead = enemy.takeDamage(1);
+      
       if (isDead) {
-        console.log(`Enemy defeated! Score: ${enemy.scoreValue}`);
+        // ★確率でアイテムドロップ
+        if (Math.random() > 0.5) { 
+           const item = new Item(this, enemy.x, enemy.y);
+           this.items.add(item);
+           
+           // ★★★ 修正: ここで速度を再設定する（念押し） ★★★
+           const body = item.body as Phaser.Physics.Arcade.Body;
+           if (body) {
+             body.setVelocityY(150);            // 下へ落ちる
+             body.setVelocityX(Phaser.Math.Between(-30, 30)); // 横へ散らす
+           }
+        }
       }
     }
   }
 
-  // ★追加: プレイヤーがダメージを受けたときの処理
-  // (敵本体との衝突、または敵弾との衝突で呼ばれる)
+  // 自機がダメージを受けたときの処理
   private handlePlayerHit(playerObj: any, damageSource: any) {
-    // 既にゲームオーバーなら無視
     if (this.isGameOver) return;
 
     const player = playerObj as Player;
     
-    // 衝突相手が「敵の弾」なら消す。「敵本体」なら消さない（あるいは敵もダメージ受ける？）
-    // 今回は「敵の弾」かどうか判定して消す
+    // 弾なら消す
     if (damageSource instanceof Bullet) {
         damageSource.destroy();
-    } else {
-        // 敵本体とぶつかった場合、敵も破壊するか、そのままにするか。
-        // 一般的には敵も破壊することが多いですが、一旦そのままで。
     }
 
     // プレイヤーにダメージ通知
     player.takeDamage();
   }
 
-  // ★追加: ゲームオーバー時の処理
+  // ★追加: アイテム取得時の処理
+  private handlePlayerItemCollision(playerObj: any, itemObj: any) {
+    const player = playerObj as Player;
+    const item = itemObj as Item;
+
+    // アイテムを消す
+    item.destroy();
+
+    // 自機を進化させる
+    player.promote();
+  }
+
+  // ゲームオーバー時の処理
   private handleGameOver() {
     this.isGameOver = true;
-    this.input.setDefaultCursor('default'); // カーソルを戻す
-
-    // 物理演算を止める
+    this.input.setDefaultCursor('default');
     this.physics.pause();
 
-    // 画面中央にテキスト表示
     const { width, height } = this.scale;
     this.add.text(width / 2, height / 2, 'GAME OVER', {
       fontSize: '64px',
@@ -149,9 +197,8 @@ export class GameScene extends Phaser.Scene {
       color: '#ffffff'
     }).setOrigin(0.5);
 
-    // クリックでリスタート
     this.input.once('pointerdown', () => {
-      this.events.off('game-over'); // リスナー解除
+      this.events.off('game-over');
       this.scene.restart();
     });
   }

@@ -1,12 +1,12 @@
 {
   "pieces": [
-    { "id": "FU", "name": "歩兵", "pattern_id": "PATTERN_FU_BASIC", "speed": 300 },
-    { "id": "KYO", "name": "香車", "pattern_id": "PATTERN_KYO_LONG", "speed": 320 },
-    { "id": "KEI", "name": "桂馬", "pattern_id": "PATTERN_KEI_JUMP", "speed": 350 },
-    { "id": "GIN", "name": "銀将", "pattern_id": "PATTERN_KEI_JUMP", "speed": 300 }, 
-    { "id": "KIN", "name": "金将", "pattern_id": "PATTERN_KIN_GOLD", "speed": 300 },
-    { "id": "HISHA", "name": "飛車", "pattern_id": "PATTERN_HISHA_ROOK", "speed": 280 },
-    { "id": "OU", "name": "王将", "pattern_id": "PATTERN_HISHA_ROOK", "speed": 400 }
+    { "id": "FU", "name": "歩", "pattern_id": "PATTERN_FU_BASIC", "speed": 300 },
+    { "id": "KYO", "name": "香", "pattern_id": "PATTERN_KYO_LONG", "speed": 320 },
+    { "id": "KEI", "name": "桂", "pattern_id": "PATTERN_KEI_JUMP", "speed": 350 },
+    { "id": "GIN", "name": "銀", "pattern_id": "PATTERN_GIN_SILVER", "speed": 300 }, 
+    { "id": "KIN", "name": "金", "pattern_id": "PATTERN_KIN_GOLD", "speed": 300 },
+    { "id": "HISHA", "name": "飛", "pattern_id": "PATTERN_HISHA_ROOK", "speed": 280 },
+    { "id": "OU", "name": "竜", "pattern_id": "PATTERN_RYU_ROOK", "speed": 400 }
   ],
   "rank_progression": [
     { "rank": 1, "piece_id": "FU", "next": "KYO", "prev": "FU" },

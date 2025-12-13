@@ -28,6 +28,20 @@
     ]
   },
   {
+    "id": "PATTERN_GIN_SILVER",
+    "description": "銀将: 前方・横・後方",
+    "range": 3,
+    "interval_ms": 200,
+    "projectiles": [
+      { "angle": 0, "speed": 8 },
+      { "angle": -45, "speed": 8 },
+      { "angle": 45, "speed": 8 },
+      { "angle": -135, "speed": 8 },
+      { "angle": 135, "speed": 8 }      
+    ]
+  },
+  
+  {
     "id": "PATTERN_KIN_GOLD",
     "description": "金将: 前方・横・後方",
     "range": 3,
@@ -47,6 +61,22 @@
     "range": 10,
     "interval_ms": 150,
     "projectiles": [
+      { "angle": 0, "speed": 12 },
+      { "angle": 90, "speed": 12 },
+      { "angle": 180, "speed": 12 },
+      { "angle": 270, "speed": 12 }
+    ]
+  },
+  {
+    "id": "PATTERN_RYU_ROOK",
+    "description": "竜: 十字貫通斜め",
+    "range": 10,
+    "interval_ms": 150,
+    "projectiles": [
+      { "angle": -45, "speed": 8 },
+      { "angle": 45, "speed": 8 },
+      { "angle": -135, "speed": 8 },
+      { "angle": 135, "speed": 8 }, 
       { "angle": 0, "speed": 12 },
       { "angle": 90, "speed": 12 },
       { "angle": 180, "speed": 12 },

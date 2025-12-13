@@ -12,7 +12,7 @@ export class Player extends Phaser.GameObjects.Container {
   private lastFiredTime: number = 0;
   // ★重要: 現在のランクを管理 (初期は "FU")
   private currentPieceId: string = 'FU'; 
-  
+  private isInvincible: boolean = false;
   private bulletsGroup: Phaser.Physics.Arcade.Group;
 
   constructor(
@@ -47,8 +47,31 @@ export class Player extends Phaser.GameObjects.Container {
     body.setSize(30, 40);
     body.setOffset(-35, -40); // 中心に合わせる
   }
+  // ★追加: プロモーション（進化）処理
+  public promote() {
+    // 既にやられていたら何もしない
+    if (!this.active) return;
 
-  update(time: number, delta: number) {
+    const pConfig = playerConfigData as PlayerConfig;
+    
+    // 現在の駒がリストの何番目かを探す
+    const currentIndex = pConfig.pieces.findIndex(p => p.id === this.currentPieceId);
+
+    // 次の駒データが存在すれば進化する
+    if (currentIndex >= 0 && currentIndex < pConfig.pieces.length - 1) {
+      const nextPiece = pConfig.pieces[currentIndex + 1];
+      
+      // IDを更新（これで次のフレームから攻撃パターンが変わります）
+      this.currentPieceId = nextPiece.id;
+
+      // 見た目の文字を更新
+      this.label.setText(nextPiece.name);
+      
+      console.log(`Promoted to ${nextPiece.name}!`);
+    }
+  }
+  
+  update(time: number, _delta: number) {  
     // ゲームオーバーなら操作不能にするなどの制御用に、activeチェックを入れると良い
     if (!this.active) return;
 
@@ -86,20 +109,49 @@ export class Player extends Phaser.GameObjects.Container {
   }
 
   // ★追加: ダメージ処理
-  public takeDamage() {
-    // 既にやられていたら何もしない
-    if (!this.active) return;
+public takeDamage() {
+    // 1. 既にやられている、または「無敵時間中」なら何もしない
+    // ★ここが最も重要です！これで連続ヒットを防ぎます
+    if (!this.active || this.isInvincible) return;
 
-    if (this.currentPieceId === 'FU') {
-      // 歩なら即ゲームオーバー
+    const pConfig = playerConfigData as PlayerConfig;
+    const currentIndex = pConfig.pieces.findIndex(p => p.id === this.currentPieceId);
+
+    // 歩(インデックス0)ならゲームオーバー
+    if (currentIndex <= 0) {
       this.die();
     } else {
-      // ランクダウン処理 (今回はまだ実装しないが場所だけ作っておく)
-      console.log("Demotion!");
-      // this.demote(); 
+      // ランクダウン処理
+      const prevPiece = pConfig.pieces[currentIndex - 1];
+      this.currentPieceId = prevPiece.id;
+      this.label.setText(prevPiece.name);
+      console.log(`Demoted to ${prevPiece.name}`);
+
+      // ★追加: 無敵時間の開始
+      this.triggerInvincibility();
     }
   }
 
+  // ★追加: 無敵時間の処理メソッド
+  private triggerInvincibility() {
+    this.isInvincible = true;
+
+    // 点滅アニメーション (100ms * 2 * 8回 = 約1.6秒間無敵)
+    this.scene.tweens.add({
+      targets: this,
+      alpha: 0.1,    // 薄くする
+      duration: 100, // 0.1秒で変化
+      yoyo: true,    // 元に戻る
+      repeat: 8,     // 8回繰り返す
+      onComplete: () => {
+        // アニメーションが終わったら無敵解除
+        this.isInvincible = false;
+        this.alpha = 1; // 完全に不透明に戻す
+      }
+    });
+  }
+
+  
 private die() {
     // 二重実行防止
     if (!this.active) return;
