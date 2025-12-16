@@ -1,10 +1,18 @@
 import Phaser from 'phaser';
-import type { EnemyConfig } from '../types/ConfigTypes';
+import { Player } from './Player';
+
+import { EnemyLogic} from '../utils/EnemyLogic'; // ★追加
+import type { EnemyConfig, AIProfile } from '../types/ConfigTypes';
+
 
 export class Enemy extends Phaser.GameObjects.Container {
   public hp: number;
   public scoreValue: number;
   private speed: number;
+  
+  // ★ movementType を廃止し、aiProfile を持つ
+  private aiProfile: AIProfile;
+  
   private bodyShape: Phaser.GameObjects.Polygon;
   private label: Phaser.GameObjects.Text;
 
@@ -16,66 +24,87 @@ export class Enemy extends Phaser.GameObjects.Container {
     this.hp = config.hp;
     this.scoreValue = config.score;
     this.speed = config.speed;
-
-    // 1. 形状: 「普通の向き（上向き）」で作ります
-    // （コンテナごと回転させるので、作るときは素直な向きでOKです）
-    const shapePoints = [
-      0, -30,   // 上
-      20, -10,  // 右上
-      15, 25,   // 右下
-      -15, 25,  // 左下
-      -20, -10  // 左上
-    ];
-    this.bodyShape = scene.add.polygon(0, 0, shapePoints, 0x8b4513);
-    this.bodyShape.setStrokeStyle(2, 0xdeb887);
+    
+    // ★ JSONから設定を読み込む (なければデフォルト値)    
+  // ★修正: 後ろに "as AIProfile" をつけて型を保証する
+    this.aiProfile = config.ai_profile || { 
+      mode: 'strategic_move', 
+      speed_rate: 1.0, 
+      movable_angles: [90] 
+    } as AIProfile;
+    
+    // --- ここから見た目の設定 (変更なし) ---
+    const color = parseInt(config.texture_color || "0xE6CAA0");
+    const shapePoints = [0, 20, 20, 10, 15, -25, -15, -25, -20, 10];
+    this.bodyShape = scene.add.polygon(0, 0, shapePoints, color);
+    this.bodyShape.setStrokeStyle(2, 0x5c4033);
     this.add(this.bodyShape);
 
-    // 2. 文字: 中心(0,0)に配置。回転はコンテナに任せるので文字自体の回転は不要。
-    const displayName = config.name.replace('敵', '').substring(0, 1);
-    this.label = scene.add.text(-20, -20, displayName, { // 位置微調整 (-5)
-      fontSize: '24px',
-      color: '#ffffff',
+    this.label = scene.add.text(-20, -30, config.name, {
+      fontSize: '20px',
+      color: '#000000',
       fontFamily: 'serif'
     }).setOrigin(0.5);
+    this.label.setRotation(Math.PI);
     this.add(this.label);
+    // ------------------------------------
 
-    // 3. コンテナ全体を180度回転（これで見た目は完璧なはず）
-    this.setRotation(Math.PI);
-
-    // 4. 当たり判定サイズ
     const body = this.body as Phaser.Physics.Arcade.Body;
-    body.setSize(40, 50);
-    // ★重要: オフセットは一切設定しない（デフォルトのまま）
-    // updateメソッドでの強制上書きで制御するため
+    body.setSize(config.width, config.height);
+  // ▼▼▼▼▼▼ 追加: ここで中心位置を調整します ▼▼▼▼▼▼
+    // 幅と高さの半分をマイナス方向にずらすことで、コンテナの中心に合わせます
+    body.setOffset(-config.width / 2-20, -config.height / 2-20);
+    // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+
+    // イベントリスナー登録
+    scene.events.on('start-turn', this.onStartTurn, this);
+    scene.events.on('stop-turn', this.onStopTurn, this);
+    
+    this.on('destroy', () => {
+      scene.events.off('start-turn', this.onStartTurn, this);
+      scene.events.off('stop-turn', this.onStopTurn, this);
+    });
   }
-  update(_time: number, delta: number) {
-    // 移動
-    this.y += this.speed * (delta / 1000);
 
-    // ★★★ 物理ボディの位置合わせ (シンプル・イズ・ベスト) ★★★
-    const body = this.body as Phaser.Physics.Arcade.Body;
-    if (body) {
-      // 難しい計算は無し。「コンテナの今の中心座標」から「半分のサイズ」を引けば
-      // 絶対にヒットボックスの左上は正しい位置に来ます。
-      // Arcade Physicsの箱は回転しないので、これで常に真ん中です。
-      body.x = this.x - (body.width / 2);
-      body.y = this.y - (body.height / 2);
-    }
+  // ★ 汎用ロジッククラスを使って移動
+  public onStartTurn() {
+    if (!this.active) return;
+    
+    // シーンからプレイヤーを取得 (簡易的にキャストして取得)
+    const player = (this.scene as any).player as Player;
+    
+    EnemyLogic.applyMove(this, player, this.aiProfile, this.speed);
+  }
 
-    // 画面外削除
+  // ★ 汎用ロジッククラスを使って停止
+  public onStopTurn() {
+    if (!this.active) return;
+    EnemyLogic.stop(this);
+  }
+
+  update(_time: number, _delta: number) {
     if (this.y > this.scene.scale.height + 50) {
       this.destroy();
     }
   }
 
-  public takeDamage(amount: number): boolean {
-    this.hp -= amount;
+  public takeDamage(damage: number): boolean {
+    this.hp -= damage;
     if (this.hp <= 0) {
-        this.scene.tweens.add({
-            targets: this, alpha: 0, scale: 1.5, duration: 100, onComplete: () => this.destroy()
-        });
-        return true;
+      // 破壊時にリスナー解除を忘れない
+      this.scene.events.off('start-turn', this.onStartTurn, this);
+      this.scene.events.off('stop-turn', this.onStopTurn, this);
+      this.destroy();
+      return true;
     }
+    this.scene.tweens.add({
+        targets: this,
+        alpha: 0.5,
+        duration: 50,
+        yoyo: true,
+        repeat: 1
+    });
     return false;
   }
 }

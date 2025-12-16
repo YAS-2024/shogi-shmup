@@ -21,13 +21,16 @@ export class Item extends Phaser.GameObjects.Container {
     }).setOrigin(0.5);
     this.add(label);
 
-    // 3. 物理設定と落下の動き
+// 3. 物理設定
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setSize(30, 40);
-
-    // ★ここが落下の設定です
-    // プラスの値を入れると下へ進みます (数値が大きいほど速い)
+    
+    // ★追加: 判定の中心を画像の中心に合わせる (幅30, 高さ40の半分ずつずらす)
+    body.setOffset(-30, -40);
+    
+    // 速度設定
     body.setVelocityY(150); 
+    body.setVelocityX(Phaser.Math.Between(-30, 30));
     
     // ★少しだけ左右にランダムに散らばらせる演出 (-30 〜 30)
     body.setVelocityX(Phaser.Math.Between(-30, 30));
