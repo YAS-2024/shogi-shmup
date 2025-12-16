@@ -1,16 +1,14 @@
 import Phaser from 'phaser';
 import { Player } from './Player';
-
-import { EnemyLogic} from '../utils/EnemyLogic'; // ★追加
+import { EnemyLogic } from '../utils/EnemyLogic';
+import { GridUtils } from '../utils/GridUtils'; // ★追加: サイズ計算用
 import type { EnemyConfig, AIProfile } from '../types/ConfigTypes';
-
 
 export class Enemy extends Phaser.GameObjects.Container {
   public hp: number;
   public scoreValue: number;
-  private speed: number;
+  public speed: number; // private -> publicに変更 (Logicから参照するため)
   
-  // ★ movementType を廃止し、aiProfile を持つ
   private aiProfile: AIProfile;
   
   private bodyShape: Phaser.GameObjects.Polygon;
@@ -25,37 +23,48 @@ export class Enemy extends Phaser.GameObjects.Container {
     this.scoreValue = config.score;
     this.speed = config.speed;
     
-    // ★ JSONから設定を読み込む (なければデフォルト値)    
-  // ★修正: 後ろに "as AIProfile" をつけて型を保証する
+    // ★修正: デフォルト値を新しい AIProfile の定義に合わせる (speed_rate削除)
     this.aiProfile = config.ai_profile || { 
-      mode: 'strategic_move', 
-      speed_rate: 1.0, 
-      movable_angles: [90] 
+      mode: 'grid_move', 
+      move_pattern: [[0, 1]] 
     } as AIProfile;
     
-    // --- ここから見た目の設定 (変更なし) ---
+    // --- ここから見た目の設定 ---
     const color = parseInt(config.texture_color || "0xE6CAA0");
-    const shapePoints = [0, 20, 20, 10, 15, -25, -15, -25, -20, 10];
+    
+    // ★修正: 縦の重なりを減らすため、少し高さを縮めた形状
+    const shapePoints = [
+        0, 15,    // 下 (以前は 20)
+        20, 8,    // 右下 (以前は 10)
+        15, -20,  // 右上 (以前は -25)
+        -15, -20, // 左上 (以前は -25)
+        -20, 8    // 左下 (以前は 10)
+    ];
+
     this.bodyShape = scene.add.polygon(0, 0, shapePoints, color);
     this.bodyShape.setStrokeStyle(2, 0x5c4033);
     this.add(this.bodyShape);
 
-    this.label = scene.add.text(-20, -30, config.name, {
+    this.label = scene.add.text(-20, -25, config.name, { // 0,0 に配置
       fontSize: '20px',
       color: '#000000',
       fontFamily: 'serif'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5); // 中心揃え
+    
     this.label.setRotation(Math.PI);
     this.add(this.label);
     // ------------------------------------
 
+    // --- 物理設定 ---
     const body = this.body as Phaser.Physics.Arcade.Body;
-    body.setSize(config.width, config.height);
-  // ▼▼▼▼▼▼ 追加: ここで中心位置を調整します ▼▼▼▼▼▼
-    // 幅と高さの半分をマイナス方向にずらすことで、コンテナの中心に合わせます
-    body.setOffset(-config.width / 2-20, -config.height / 2-20);
-    // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+    
+    // ★修正: config.width がなくなったので、グリッドサイズから自動計算 (80%の大きさ)
+    const hitBoxSize = GridUtils.CELL_SIZE * 0.8; 
+    body.setSize(hitBoxSize, hitBoxSize);
 
+    // ★修正: 中心合わせ + マジックナンバー調整 (-20)
+    // 幅と高さの半分をマイナスし、さらに -20 して位置を微調整
+    body.setOffset(-hitBoxSize / 2 - 20, -hitBoxSize / 2 - 20);
 
     // イベントリスナー登録
     scene.events.on('start-turn', this.onStartTurn, this);
@@ -74,6 +83,7 @@ export class Enemy extends Phaser.GameObjects.Container {
     // シーンからプレイヤーを取得 (簡易的にキャストして取得)
     const player = (this.scene as any).player as Player;
     
+    // Logicに渡す
     EnemyLogic.applyMove(this, player, this.aiProfile, this.speed);
   }
 

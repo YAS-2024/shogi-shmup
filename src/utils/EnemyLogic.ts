@@ -1,67 +1,110 @@
 import Phaser from 'phaser';
 import { Player } from '../entities/Player';
 import { Enemy } from '../entities/Enemy';
+import { GridUtils } from './GridUtils'; 
 import type { AIProfile } from '../types/ConfigTypes';
 
 export class EnemyLogic {
   /**
-   * 駒ごとの移動可能角度の中から、最もプレイヤーに近づける方向を選択して移動する
+   * グリッドベースの移動ロジック
    */
   static applyMove(enemy: Enemy, player: Player | null, profile: AIProfile, baseSpeed: number) {
-    const body = enemy.body as Phaser.Physics.Arcade.Body;
-    if (!body || !enemy.active) return;
+    if (!enemy.active) return;
 
-    // 基本速度
-    const speed = baseSpeed * profile.speed_rate;
+    // 1. 自分の現在位置をグリッド座標に変換
+    const currentGrid = GridUtils.pixelToGrid(enemy.x, enemy.y);
 
-    // プレイヤーがいない場合は、とりあえず「真下(90度)」に近い角度を選ぶ
-    const targetX = player && player.active ? player.x : enemy.x;
-    const targetY = player && player.active ? player.y : enemy.y + 1000;
+    // 2. プレイヤーの位置（ターゲット）を取得
+    // プレイヤーが死んでいる場合は、とりあえず「画面下端の中央」を目指す
+    let targetX = enemy.scene.scale.width / 2;
+    let targetY = enemy.scene.scale.height;
 
-    // ベストな角度を探す
-    const bestAngle = this.findBestAngle(enemy, targetX, targetY, profile.movable_angles);
+    if (player && player.active) {
+      targetX = player.x;
+      targetY = player.y;
+    }
 
-    // 速度ベクトルを設定
-    const rad = Phaser.Math.DegToRad(bestAngle);
-    const vx = Math.cos(rad) * speed;
-    const vy = Math.sin(rad) * speed;
+    // 3. 移動パターンの候補から、ベストな移動先(グリッド)を探す
+    const bestGrid = this.findBestNextGrid(currentGrid, profile.move_pattern, targetX, targetY);
 
-    body.setVelocity(vx, vy);
+    // 4. 移動先が決まったら、そこへ向かって移動開始 (Pixel座標に変換)
+    if (bestGrid) {
+      const targetPixel = GridUtils.gridToPixel(bestGrid.col, bestGrid.row);
+      
+      // ★修正: speed_rate は廃止されたため、baseSpeed (JSONのspeed) をそのまま使います
+      // また、物理演算(moveTo)は使わず、Tweenのみで移動させます
+      this.moveByTween(enemy, targetPixel.x, targetPixel.y, baseSpeed);
+    }
   }
 
   /**
-   * 選択肢の中で、ターゲット(プレイヤー)への距離が最小になる角度を返す
+   * ベストな移動先マスを探す
    */
-  private static findBestAngle(enemy: Enemy, targetX: number, targetY: number, angles: number[]): number {
-    if (!angles || angles.length === 0) return 90; // デフォルトは下
+  private static findBestNextGrid(
+    current: { col: number, row: number },
+    patterns: number[][],
+    targetPixelX: number,
+    targetPixelY: number
+  ): { col: number, row: number } | null {
+    
+    let bestGrid = null;
+    let minDistanceSq = Number.MAX_VALUE;
 
-    let bestAngle = angles[0];
-    let minDistance = Number.MAX_VALUE;
+    for (const pat of patterns) {
+      const nextCol = current.col + pat[0];
+      const nextRow = current.row + pat[1];
 
-    // すべての候補角度についてシミュレーション
-    for (const angle of angles) {
-      // その方向に1単位進んだ場合の座標を計算
-      const rad = Phaser.Math.DegToRad(angle);
-      const testX = enemy.x + Math.cos(rad);
-      const testY = enemy.y + Math.sin(rad);
+      // 画面外（左右）に出る動きは除外
+      if (nextCol < 0 || nextCol >= GridUtils.COLS) continue;
 
-      // ターゲットとの距離(の2乗)を計算
-      const distSq = Phaser.Math.Distance.Squared(testX, testY, targetX, targetY);
+      // 候補マスのピクセル座標
+      const nextPixel = GridUtils.gridToPixel(nextCol, nextRow);
+
+      // ターゲットとの距離を計算
+      const distSq = Phaser.Math.Distance.Squared(nextPixel.x, nextPixel.y, targetPixelX, targetPixelY);
 
       // より近くなるなら更新
-      if (distSq < minDistance) {
-        minDistance = distSq;
-        bestAngle = angle;
+      if (distSq < minDistanceSq) {
+        minDistanceSq = distSq;
+        bestGrid = { col: nextCol, row: nextRow };
       }
     }
+    
+    // 候補がなければ null を返してその場待機
+    return bestGrid;
+  }
 
-    return bestAngle;
+  /**
+   * 物理移動ではなくTweenアニメーションで動かす（将棋っぽい挙動）
+   */
+  private static moveByTween(enemy: Enemy, targetX: number, targetY: number, speed: number) {
+    const body = enemy.body as Phaser.Physics.Arcade.Body;
+    // 物理速度は0にする（干渉しないように）
+    if (body) body.setVelocity(0, 0);
+
+    // 距離計算
+    const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, targetX, targetY);
+    if (dist < 1) return; // すでにいる
+
+    // 時間 = 距離 / 速度 * 1000
+    // 少しキビキビ動かしたいので係数を調整 (0.8倍)
+    const duration = (dist / speed) * 1000 * 0.8; 
+
+    enemy.scene.tweens.add({
+      targets: enemy,
+      x: targetX,
+      y: targetY,
+      duration: duration,
+      ease: 'Cubic.out', // すっと動いて減速して止まる
+      onComplete: () => {
+        // 到着後の処理があれば記述
+      }
+    });
   }
 
   static stop(enemy: Enemy) {
     const body = enemy.body as Phaser.Physics.Arcade.Body;
-    if (body) {
-      body.setVelocity(0, 0);
-    }
+    if (body) body.setVelocity(0, 0);
+    enemy.scene.tweens.killTweensOf(enemy); // 移動アニメーションも止める
   }
 }

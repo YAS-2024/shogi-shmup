@@ -1,0 +1,55 @@
+{
+  "waves": [
+    {
+      "id": "easy_fu_line",
+      "difficulty": 1,
+      "enemies": [
+        { "type": "ENEMY_FU", "gridX": 3, "gridY": 0 },
+        { "type": "ENEMY_FU", "gridX": 5, "gridY": 0 }
+      ]
+    },
+    {
+      "id": "easy_fu_triangle",
+      "difficulty": 1,
+      "enemies": [
+        { "type": "ENEMY_FU", "gridX": 4, "gridY": 0 },
+        { "type": "ENEMY_FU", "gridX": 3, "gridY": -1 },
+        { "type": "ENEMY_FU", "gridX": 5, "gridY": -1 }
+      ]
+    },
+    {
+      "id": "normal_ke_assault",
+      "difficulty": 2,
+      "enemies": [
+        { "type": "ENEMY_KE", "gridX": 2, "gridY": 0 },
+        { "type": "ENEMY_KE", "gridX": 6, "gridY": 0 }
+      ]
+    },
+    {
+      "id": "normal_gin_attack",
+      "difficulty": 3,
+      "enemies": [
+        { "type": "ENEMY_GIN", "gridX": 4, "gridY": 0 },
+        { "type": "ENEMY_FU", "gridX": 3, "gridY": 1 },
+        { "type": "ENEMY_FU", "gridX": 5, "gridY": 1 }
+      ]
+    },
+    {
+      "id": "hard_kin_defense",
+      "difficulty": 4,
+      "enemies": [
+        { "type": "ENEMY_KI", "gridX": 3, "gridY": 0 },
+        { "type": "ENEMY_KI", "gridX": 5, "gridY": 0 },
+        { "type": "ENEMY_OU", "gridX": 4, "gridY": -1 }
+      ]
+    },
+    {
+      "id": "hard_hisha_kaku",
+      "difficulty": 5,
+      "enemies": [
+        { "type": "ENEMY_HI", "gridX": 1, "gridY": 0 },
+        { "type": "ENEMY_KAKU", "gridX": 7, "gridY": 0 }
+      ]
+    }
+  ]
+}

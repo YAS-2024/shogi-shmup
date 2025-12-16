@@ -48,13 +48,12 @@ export interface EnemyConfigRoot {
 // 型定義もここでexportしておくと便利です
 export interface AIProfile {
   // 動きのモード ('strategic_move' に統一)
-  mode: 'strategic_move'; 
+  mode: 'grid_move';
   
-  // 速度倍率
-  speed_rate: number; 
   
-  // 動ける角度のリスト
-  movable_angles: number[]; 
+  // ★変更: 相対座標のリスト [[0, 1], [-1, 2]] など
+  // [x方向(右+,左-), y方向(下+,上-)]
+  move_pattern: number[][]; 
 }
 
 export interface EnemyConfig {
@@ -63,17 +62,34 @@ export interface EnemyConfig {
   hp: number;
   score: number;
   speed: number;
-  width: number;
-  height: number;
   texture_color: string;
-  
-  // ★ここも AIProfile を使うようになっているか確認
-  ai_profile?: AIProfile; 
+  ai_profile?: AIProfile;
 }
 
 export interface EnemyConfigRoot {
   enemy_types: EnemyConfig[];
 }
+export interface EnemyConfigRoot {
+  enemy_types: EnemyConfig[];
+}
+
+// Wave定義用の型も追加しておきます
+export interface WaveEnemyDef {
+  type: string;  // "ENEMY_FU" など
+  gridX: number; // 0~8
+  gridY: number; // 0, -1, -2...
+}
+
+export interface WaveConfig {
+  id: string;
+  difficulty: number;
+  enemies: WaveEnemyDef[];
+}
+
+export interface WaveConfigRoot {
+  waves: WaveConfig[];
+}
+
 export interface EnemyConfigRoot {
   enemy_types: EnemyConfig[];
 }
