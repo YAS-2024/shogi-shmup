@@ -9,7 +9,7 @@ import { GameConfig } from '../config/GameConfig'; // ★追加
 // データ
 import enemyConfigData from '../config/enemy_config.json';
 import waveConfigData from '../config/wave_config.json';
-import type { EnemyConfigRoot, WaveConfigRoot, EnemyConfig } from '../types/ConfigTypes';
+import type { EnemyConfigRoot, WaveConfigRoot} from '../types/ConfigTypes';
 
 export class GameScene extends Phaser.Scene {
   private player!: Player;
