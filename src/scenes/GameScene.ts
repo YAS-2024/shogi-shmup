@@ -283,7 +283,8 @@ export class GameScene extends Phaser.Scene {
     // 半透明の黒背景
     const bg = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.7);
     bg.setDepth(100);
-
+    // 背景をクリックしても裏側のゲームが反応しないようにインタラクティブにしておく
+    bg.setInteractive();
     // "GAME OVER" テキスト
     this.add.text(width / 2, height / 2 - 100, 'GAME OVER', {
       fontSize: '48px',
@@ -310,7 +311,9 @@ export class GameScene extends Phaser.Scene {
     .setDepth(101)
     .setInteractive({ useHandCursor: true });
 
-    tweetBtn.on('pointerdown', () => {
+// ★修正: pointerdown -> pointerup に変更
+    // これでスマホの「タップ」判定が正しく行われ、ポップアップも許可されやすくなります
+    tweetBtn.on('pointerup', () => {
       this.tweetScore();
     });
 
@@ -319,13 +322,16 @@ export class GameScene extends Phaser.Scene {
       fontSize: '24px',
       color: '#ffffff',
       backgroundColor: '#333333',
-      padding: { x: 20, y: 10 }
+      padding: { x: 20, y: 15 } // こちらも広げる
     })
     .setOrigin(0.5)
     .setDepth(101)
     .setInteractive({ useHandCursor: true });
 
-    retryBtn.on('pointerdown', () => {
+    // ★修正: こちらも操作感を統一するため pointerup に変更
+    retryBtn.on('pointerup', () => {
+      // 念のためツイートボタンなどが誤反応しないよう、少し遅延させるテクニックもありますが
+      // pointerupなら通常は問題ありません
       this.scene.restart();
     });
   }
