@@ -3,13 +3,12 @@ import { Player } from '../entities/Player';
 import { Enemy } from '../entities/Enemy';
 import { Bullet } from '../entities/Bullet';
 import { Item } from '../entities/Item';
-import { GridUtils } from '../utils/GridUtils'; // ★追加
-import { GameConfig } from '../config/GameConfig'; // ★追加
+import { GridUtils } from '../utils/GridUtils';
+import { GameConfig } from '../config/GameConfig';
 
-// データ
 import enemyConfigData from '../config/enemy_config.json';
 import waveConfigData from '../config/wave_config.json';
-import type { EnemyConfigRoot, WaveConfigRoot} from '../types/ConfigTypes';
+import type { EnemyConfigRoot, WaveConfigRoot } from '../types/ConfigTypes';
 
 export class GameScene extends Phaser.Scene {
   private player!: Player;
@@ -18,10 +17,14 @@ export class GameScene extends Phaser.Scene {
   private enemyBullets!: Phaser.Physics.Arcade.Group; 
   private items!: Phaser.Physics.Arcade.Group;        
   
-  // ★Wave管理用
+  // Wave管理用
   private waveTimer: number = 0;
-  private nextWaveInterval: number = 4000; // 初回は4秒間隔
-  private currentDifficulty: number = 1;   // 現在の難易度レベル
+  private nextWaveInterval: number = 4000;
+  
+  // 難易度管理用
+  private baseDifficulty: number = 0; 
+  private difficultyTimer: number = 0;
+  private stageText!: Phaser.GameObjects.Text;
   
   private isGameOver: boolean = false;
   
@@ -45,10 +48,12 @@ export class GameScene extends Phaser.Scene {
     this.combo = 0;
     this.isEnemyTurn = false;
     
-    // Wave初期化
     this.waveTimer = 0;
     this.nextWaveInterval = 4000;
-    this.currentDifficulty = 1;
+    
+    // 難易度初期化
+    this.baseDifficulty = 0;
+    this.difficultyTimer = 0;
 
     this.cameras.main.setBackgroundColor(GameConfig.BG_COLOR || '#444444');
 
@@ -58,6 +63,14 @@ export class GameScene extends Phaser.Scene {
       color: '#ffffff',
       fontFamily: 'monospace'
     }).setDepth(100);
+
+    // ステージ表示
+    this.stageText = this.add.text(this.scale.width - 20, 20, 'STAGE 1', {
+      fontSize: '28px',
+      color: '#ffffff',
+      fontFamily: 'monospace',
+      align: 'right'
+    }).setOrigin(1, 0).setDepth(100);
 
     this.comboText = this.add.text(20, 55, '', {
       fontSize: '24px',
@@ -73,8 +86,10 @@ export class GameScene extends Phaser.Scene {
     this.items = this.physics.add.group({ classType: Item, runChildUpdate: true });
 
     // 自機生成
-    const { width, height } = this.scale;    
+    const { width, height } = this.scale;
+    // 画面下から20%の位置
     this.player = new Player(this, width / 2, height * 0.8, this.bullets);
+
     // 衝突判定
     this.physics.add.overlap(this.bullets, this.enemies, this.handleBulletEnemyCollision, undefined, this);
     this.physics.add.overlap(this.enemies, this.player, this.handlePlayerHit, undefined, this);
@@ -87,10 +102,17 @@ export class GameScene extends Phaser.Scene {
     this.startTurnCycle();
   }
 
-  // ターン管理ロジック (2秒動く -> 1秒止まる)
+  // 共通メソッド: 現在のステージ（難易度）を計算
+  private getCurrentStage(): number {
+    // プレイヤーランク(0~) + 基礎時間難易度(0~) + 1
+    // Playerが存在しない場合は安全に 1 を返す
+    const playerRank = this.player ? this.player.currentRank : 0;
+    return playerRank + this.baseDifficulty + 1;
+  }
+
+  // ターン管理ロジック (停止時間が可変になる)
   private startTurnCycle() {
-    const moveDuration = 2000;
-    const stopDuration = 1000;
+    const moveDuration = 2000; // 移動時間は2秒固定
 
     const loopTurn = () => {
       if (this.isGameOver) return;
@@ -106,12 +128,20 @@ export class GameScene extends Phaser.Scene {
         this.isEnemyTurn = false;
         this.events.emit('stop-turn'); 
         
-        // 次のループへ
+        // 次の停止時間を計算
+        const currentStage = this.getCurrentStage();
+        
+        // 計算式: 1000ms から ステージごとに50ms引く
+        // ただし、最低でも 300ms は止まる (人間が反応できる限界として)
+        const stopDuration = Math.max(150, 1000 - (currentStage * 80));
+
+        // 次のループへ (計算した停止時間だけ待つ)
         this.time.delayedCall(stopDuration, loopTurn); 
       });
     };
 
-    this.time.delayedCall(1000, loopTurn);
+    // 最初は少し待ってから開始
+    this.time.delayedCall(500, loopTurn);
   }
 
   update(time: number, delta: number) {
@@ -121,53 +151,59 @@ export class GameScene extends Phaser.Scene {
       this.player.update(time, delta);
     }
 
-    // ★Wave管理: タイマーを進めて一定時間ごとに敵グループを出現させる
+    // 30秒ごとに「基礎難易度」を+1する
+    this.difficultyTimer += delta;
+    if (this.difficultyTimer > 10000) { // 30秒
+        this.baseDifficulty++;
+        this.difficultyTimer = 0;
+    }
+
+    // ステージ表示の更新
+    const currentStage = this.getCurrentStage();
+    this.stageText.setText(`STAGE ${currentStage}`);
+
+    // Wave生成処理
     this.waveTimer += delta;
     if (this.waveTimer > this.nextWaveInterval) {
-      this.spawnWave();
+      // 現在のステージを渡して敵を生成
+      this.spawnWave(currentStage);
       this.waveTimer = 0;
       
-      // 徐々に難易度を上げ、間隔を短くする (最短1.5秒まで)
-      this.nextWaveInterval = Math.max(1500, this.nextWaveInterval - 100);
-      if (this.score > this.currentDifficulty * 2000) {
-          this.currentDifficulty++; // スコアに応じて難易度Lvアップ
-      }
+      // 出現間隔の短縮 (最短1.5秒まで)
+      this.nextWaveInterval = Math.max(1500, 4000 - (currentStage * 150)); 
     }
   }
 
-  // ★Wave生成ロジック
-  private spawnWave() {
+  // Wave生成ロジック
+  private spawnWave(difficultyLevel: number) {
     const waveRoot = waveConfigData as WaveConfigRoot;
     const enemyRoot = enemyConfigData as EnemyConfigRoot;
 
     // 現在の難易度以下のWaveを抽出
-    // (序盤は簡単なパターンのみ、終盤は難しいパターンも含めてランダム)
-    const availableWaves = waveRoot.waves.filter(w => w.difficulty <= this.currentDifficulty);
+    const availableWaves = waveRoot.waves.filter(w => w.difficulty <= difficultyLevel);
     
-    // データがない場合は全データから選ぶ（安全策）
-    const candidates = availableWaves.length > 0 ? availableWaves : waveRoot.waves;
+    // データがない場合は「一番簡単なやつ(difficulty=1)」などを候補にする
+    let candidates = availableWaves;
+    if (candidates.length === 0) {
+        candidates = waveRoot.waves.filter(w => w.difficulty === 1);
+    }
+    // それでもなければ全データから（安全策）
+    if (candidates.length === 0) {
+        candidates = waveRoot.waves;
+    }
     
-    // ランダムに1つWaveパターンを選択
     const selectedWave = candidates[Phaser.Math.Between(0, candidates.length - 1)];
 
     if (!selectedWave) return;
 
-    // Wave内の敵定義をループして生成
     selectedWave.enemies.forEach(def => {
-        // IDから敵の基本設定を取得
         const enemyConfig = enemyRoot.enemy_types.find(e => e.id === def.type);
         if (enemyConfig) {
-            // Grid座標 -> Pixel座標変換
-            // ※Wave定義のY座標は画面外(マイナス)から始まることが多い
-            //   ここではそのままGridUtilsに通して配置位置を決めます
             const pos = GridUtils.gridToPixel(def.gridX, def.gridY);
-            
-            // 画面上部に見切れすぎないよう、あまりに上なら補正しても良いですが
-            // 今回は一旦そのまま配置します
             const enemy = new Enemy(this, pos.x, pos.y, enemyConfig);
             this.enemies.add(enemy);
-
-            // もし現在「移動ターン」中なら、出現と同時に動かす
+            
+            // 現在「移動ターン」中なら、出現と同時に動かす
             if (this.isEnemyTurn) {
                 enemy.onStartTurn();
             }
@@ -186,7 +222,7 @@ export class GameScene extends Phaser.Scene {
       if (isDead) {
         this.addScore(enemy.scoreValue);
 
-        // アイテムドロップ (10%の確率に変更)
+        // アイテムドロップ (10%)
         if (Math.random() < 0.1) { 
            const item = new Item(this, enemy.x, enemy.y);
            this.items.add(item);
@@ -232,16 +268,13 @@ export class GameScene extends Phaser.Scene {
     if (this.isGameOver) return;
     const player = playerObj as Player;
     
-    // 弾なら消す
     if (damageSource instanceof Bullet) {
         damageSource.destroy();
     }
-    // 敵本体なら、敵も消滅するかどうかはゲームデザイン次第ですが
-    // ここでは敵は残る（プレイヤーだけダメージ）とします
     
     player.takeDamage();
 
-    // プレイヤー死亡確認
+    // プレイヤー死亡確認 (hpはPlayer側で管理)
     if (player.hp <= 0) {
         this.gameOver();
     }
@@ -254,37 +287,31 @@ export class GameScene extends Phaser.Scene {
     player.promote();
   }
 
-  // ■■■ ゲームオーバー処理 ■■■
+  // ゲームオーバー処理
   private gameOver() {
     if (this.isGameOver) return;
     this.isGameOver = true;
 
-    // カーソルを戻す
     this.input.setDefaultCursor('default');
     
-    // 物理演算停止
     this.physics.pause();
-    this.time.removeAllEvents(); // タイマー系全停止
+    this.time.removeAllEvents();
 
-    // プレイヤーを赤くする
     if (this.player) {
       this.player.setTint(0xff0000);
     }
 
-    // UI作成
     this.createGameOverUI();
   }
 
-  // ■■■ UI作成メソッド ■■■
+  // UI作成メソッド
   private createGameOverUI() {
     const { width, height } = this.scale;
 
-    // 半透明の黒背景
     const bg = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.7);
     bg.setDepth(100);
-    // 背景をクリックしても裏側のゲームが反応しないようにインタラクティブにしておく
-    bg.setInteractive();
-    // "GAME OVER" テキスト
+    bg.setInteractive(); 
+
     this.add.text(width / 2, height / 2 - 100, 'GAME OVER', {
       fontSize: '48px',
       color: '#ffffff',
@@ -292,7 +319,6 @@ export class GameScene extends Phaser.Scene {
       fontFamily: 'serif'
     }).setOrigin(0.5).setDepth(101);
 
-    // スコア表示
     this.add.text(width / 2, height / 2 - 20, `SCORE: ${this.score}`, {
       fontSize: '32px',
       color: '#ffff00',
@@ -304,14 +330,13 @@ export class GameScene extends Phaser.Scene {
       fontSize: '24px',
       color: '#1DA1F2', 
       backgroundColor: '#ffffff',
-      padding: { x: 10, y: 5 }
+      padding: { x: 10, y: 10 }
     })
     .setOrigin(0.5)
     .setDepth(101)
     .setInteractive({ useHandCursor: true });
 
-// ★修正: pointerdown -> pointerup に変更
-    // これでスマホの「タップ」判定が正しく行われ、ポップアップも許可されやすくなります
+    // スマホ対応のため pointerup
     tweetBtn.on('pointerup', () => {
       this.tweetScore();
     });
@@ -321,26 +346,22 @@ export class GameScene extends Phaser.Scene {
       fontSize: '24px',
       color: '#ffffff',
       backgroundColor: '#333333',
-      padding: { x: 20, y: 15 } // こちらも広げる
+      padding: { x: 20, y: 15 }
     })
     .setOrigin(0.5)
     .setDepth(101)
     .setInteractive({ useHandCursor: true });
 
-    // ★修正: こちらも操作感を統一するため pointerup に変更
     retryBtn.on('pointerup', () => {
-      // 念のためツイートボタンなどが誤反応しないよう、少し遅延させるテクニックもありますが
-      // pointerupなら通常は問題ありません
       this.scene.restart();
     });
   }
 
-  // ■■■ ツイート機能 ■■■
+  // ■■■ ツイート機能 (更新版) ■■■
   private tweetScore() {
     const text = `将棋シューティングで ${this.score} 点を獲得しました！\n迫りくる将棋の駒を撃ち落とせ！`;
-    const hashtags = '将棋シューティング,Phaser3,個人開発';
-    // ※公開時は実際のURLを入れてください
-    const url = 'https://example.com'; 
+    const hashtags = '将棋シューティング,アプリコンペ';    
+    const url = 'https://yas-2024.github.io/shogi-shmup/'; 
 
     const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&hashtags=${hashtags}&url=${encodeURIComponent(url)}`;
     

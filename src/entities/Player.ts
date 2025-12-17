@@ -8,7 +8,8 @@ export class Player extends Phaser.GameObjects.Container {
   // ★重要: GameSceneからの参照用に public hp を追加
   // 歩(Index 0) = HP 1, 香(Index 1) = HP 2 ... という扱いにします
   public hp: number = 1;
-
+　// ★追加: 現在のランク数値 (0:歩, 1:香, ...)
+  public currentRank: number = 0;
   private bodyShape: Phaser.GameObjects.Polygon;
   private label: Phaser.GameObjects.Text;
   private lastFiredTime: number = 0;
@@ -32,7 +33,7 @@ export class Player extends Phaser.GameObjects.Container {
 
     // HP初期化 (最初は歩なので 1)
     this.hp = 1;
-
+    this.currentRank = 0; // ★初期化
     // 形状
     const shapePoints = [0, -30, 20, -10, 15, 25, -15, 25, -20, -10];
     this.bodyShape = scene.add.polygon(0, 0, shapePoints, 0xdeb887);
@@ -70,7 +71,8 @@ export class Player extends Phaser.GameObjects.Container {
       
       // ★追加: 進化したらHP（耐久力）も増やす
       this.hp = currentIndex + 2; 
-
+      // ★追加: ランク更新
+      this.currentRank = currentIndex + 1;
       console.log(`Promoted to ${nextPiece.name}! (HP: ${this.hp})`);
       
       // 進化演出（少し跳ねるなど）
@@ -142,7 +144,8 @@ export class Player extends Phaser.GameObjects.Container {
       
       // ★HPを現在のランク(インデックス+1)に合わせる
       this.hp = currentIndex; 
-      
+      // ★追加: ランク更新 (下がる)
+      this.currentRank = currentIndex - 1;      
       console.log(`Demoted to ${prevPiece.name} (HP: ${this.hp})`);
 
       // 無敵時間の開始
