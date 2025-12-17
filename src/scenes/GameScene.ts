@@ -73,9 +73,8 @@ export class GameScene extends Phaser.Scene {
     this.items = this.physics.add.group({ classType: Item, runChildUpdate: true });
 
     // 自機生成
-    const { width, height } = this.scale;
-    this.player = new Player(this, width / 2, height - 100, this.bullets);
-
+    const { width, height } = this.scale;    
+    this.player = new Player(this, width / 2, height * 0.8, this.bullets);
     // 衝突判定
     this.physics.add.overlap(this.bullets, this.enemies, this.handleBulletEnemyCollision, undefined, this);
     this.physics.add.overlap(this.enemies, this.player, this.handlePlayerHit, undefined, this);

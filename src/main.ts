@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+// ★追加: StartSceneをインポート
+import { StartScene } from './scenes/StartScene';
 import { GameScene } from './scenes/GameScene';
 import { GameConfig as MyGameConfig } from './config/GameConfig';
 
@@ -7,16 +9,10 @@ const config: Phaser.Types.Core.GameConfig = {
   width: MyGameConfig.GAME_WIDTH,
   height: MyGameConfig.GAME_HEIGHT,
   
-  // ★修正: トップレベルに戻します
-  // もしここで「プロパティが存在しません」とエラーが出る場合、
-  // 下記の @ts-ignore コメントを有効にしてください。
-  // (実行時には正しく動くプロパティです)
-  
   // @ts-ignore 
   resolution: MyGameConfig.GRAPHICS_SCALE,
 
   render: {
-    // ★ここから resolution は消します
     pixelArt: false,
     antialias: true,
     roundPixels: false
@@ -29,7 +25,8 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: false
     }
   },
-  scene: [GameScene],
+  // ★変更: StartScene を配列の先頭に追加します
+  scene: [StartScene, GameScene],
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH
