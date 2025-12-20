@@ -1,5 +1,4 @@
 import Phaser from 'phaser';
-import { Player } from './Player'; 
 import { EnemyLogic } from '../utils/EnemyLogic';
 import { GridUtils } from '../utils/GridUtils';
 import type { EnemyConfig, AIProfile } from '../types/ConfigTypes';
