@@ -144,16 +144,16 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(500, loopTurn);
   }
 
-  update(time: number, delta: number) {
+update(time: number, delta: number) {
     if (this.isGameOver) return;
 
     if (this.player) {
       this.player.update(time, delta);
     }
 
-    // 30秒ごとに「基礎難易度」を+1する
+    // 30秒ごとに「基礎難易度」を+1
     this.difficultyTimer += delta;
-    if (this.difficultyTimer > 10000) { // 30秒
+    if (this.difficultyTimer > 30000) {
         this.baseDifficulty++;
         this.difficultyTimer = 0;
     }
@@ -162,18 +162,32 @@ export class GameScene extends Phaser.Scene {
     const currentStage = this.getCurrentStage();
     this.stageText.setText(`STAGE ${currentStage}`);
 
-    // Wave生成処理
+    // ■■■ Wave生成処理の修正 ■■■
     this.waveTimer += delta;
     if (this.waveTimer > this.nextWaveInterval) {
-      // 現在のステージを渡して敵を生成
+      // 1. Wave生成
       this.spawnWave(currentStage);
       this.waveTimer = 0;
       
-      // 出現間隔の短縮 (最短1.5秒まで)
-      this.nextWaveInterval = Math.max(1500, 4000 - (currentStage * 150)); 
+      // 2. 次のWaveまでの間隔を「ターン数」ベースで計算して同期させる
+      
+      // 現在の停止時間を計算 (startTurnCycleと同じ計算式)
+      const currentStopDuration = Math.max(300, 1000 - (currentStage * 50));
+      
+      // 1ターンの合計時間 (移動2秒 + 停止)
+      const oneTurnDuration = 2000 + currentStopDuration;
+
+      // 「何段分空けるか」の設定 (4段進んだら次が来る)
+      const gapSteps = 4; 
+
+      // これで「物理的な距離」が常に保たれます
+      this.nextWaveInterval = oneTurnDuration * gapSteps;
+      
+      // デバッグ用ログ（確認したければコメントアウトを外してください）
+      // console.log(`Next Wave in: ${this.nextWaveInterval}ms (Stage: ${currentStage}, Stop: ${currentStopDuration}ms)`);
     }
   }
-
+  
   // Wave生成ロジック
   private spawnWave(difficultyLevel: number) {
     const waveRoot = waveConfigData as WaveConfigRoot;
@@ -199,11 +213,23 @@ export class GameScene extends Phaser.Scene {
     selectedWave.enemies.forEach(def => {
         const enemyConfig = enemyRoot.enemy_types.find(e => e.id === def.type);
         if (enemyConfig) {
-            const pos = GridUtils.gridToPixel(def.gridX, def.gridY);
-            const enemy = new Enemy(this, pos.x, pos.y, enemyConfig);
+            // 1. JSONの座標を「目的地」とする
+            const targetPos = GridUtils.gridToPixel(def.gridX, def.gridY);
+            
+            // 2. 実際の出現位置は、目的地より「10マス上」にする
+            // ★修正: 10マス(30秒待ち)は長すぎるので、2マス(6秒待ち)に変更
+            // これで「画面のすぐ上」から出現するようになります
+            const offsetGrids = 2; 
+            const spawnY = targetPos.y - (GridUtils.CELL_SIZE * offsetGrids);
+
+            // 3. 敵を生成 (出現位置 spawnY を指定)
+            const enemy = new Enemy(this, targetPos.x, spawnY, enemyConfig);
+            
+            // 4. ★重要: 目的地（行番号）を敵に覚えさせる
+            enemy.destinationRow = def.gridY;
+
             this.enemies.add(enemy);
             
-            // 現在「移動ターン」中なら、出現と同時に動かす
             if (this.isEnemyTurn) {
                 enemy.onStartTurn();
             }

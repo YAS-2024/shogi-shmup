@@ -8,7 +8,7 @@ export class Enemy extends Phaser.GameObjects.Container {
   public hp: number;
   public scoreValue: number;
   public speed: number; // private -> publicに変更 (Logicから参照するため)
-  
+  public destinationRow: number = 0;
   private aiProfile: AIProfile;
   
   private bodyShape: Phaser.GameObjects.Polygon;
@@ -22,7 +22,7 @@ export class Enemy extends Phaser.GameObjects.Container {
     this.hp = config.hp;
     this.scoreValue = config.score;
     this.speed = config.speed;
-    
+    this.destinationRow = 0;
     // ★修正: デフォルト値を新しい AIProfile の定義に合わせる (speed_rate削除)
     this.aiProfile = config.ai_profile || { 
       mode: 'grid_move', 

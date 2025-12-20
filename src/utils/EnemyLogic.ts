@@ -13,26 +13,38 @@ export class EnemyLogic {
 
     // 1. 自分の現在位置をグリッド座標に変換
     const currentGrid = GridUtils.pixelToGrid(enemy.x, enemy.y);
+    let bestGrid: { col: number, row: number } | null = null;
 
-    // 2. プレイヤーの位置（ターゲット）を取得
-    // プレイヤーが死んでいる場合は、とりあえず「画面下端の中央」を目指す
-    let targetX = enemy.scene.scale.width / 2;
-    let targetY = enemy.scene.scale.height;
+    // ■■■ 入場行進ロジック ■■■
+    // 自分の目的地(destinationRow)より手前(上)にいる場合は、
+    // まだ配置についていないので、AIを無視して強制的に「真下」へ進む
+    if (currentGrid.row < enemy.destinationRow) {
+       // まだ定位置より上にいる -> 脇目も振らず真下へ
+       bestGrid = { col: currentGrid.col, row: currentGrid.row + 1 };
+    
+    } else {
+       // ■■■ 通常AIロジック ■■■
+       // 定位置に到着済み（あるいは通り過ぎた）なら、本来の動きを開始する
 
-    if (player && player.active) {
-      targetX = player.x;
-      targetY = player.y;
+       // 2. プレイヤーの位置（ターゲット）を取得
+       // プレイヤーが死んでいる場合は、とりあえず「画面下端の中央」を目指す
+       let targetX = enemy.scene.scale.width / 2;
+       let targetY = enemy.scene.scale.height;
+
+       if (player && player.active) {
+         targetX = player.x;
+         targetY = player.y;
+       }
+
+       // 3. 移動パターンの候補から、ベストな移動先(グリッド)を探す
+       bestGrid = this.findBestNextGrid(currentGrid, profile.move_pattern, targetX, targetY);
     }
-
-    // 3. 移動パターンの候補から、ベストな移動先(グリッド)を探す
-    const bestGrid = this.findBestNextGrid(currentGrid, profile.move_pattern, targetX, targetY);
 
     // 4. 移動先が決まったら、そこへ向かって移動開始 (Pixel座標に変換)
     if (bestGrid) {
       const targetPixel = GridUtils.gridToPixel(bestGrid.col, bestGrid.row);
       
-      // ★修正: speed_rate は廃止されたため、baseSpeed (JSONのspeed) をそのまま使います
-      // また、物理演算(moveTo)は使わず、Tweenのみで移動させます
+      // Tweenのみで移動させます
       this.moveByTween(enemy, targetPixel.x, targetPixel.y, baseSpeed);
     }
   }
