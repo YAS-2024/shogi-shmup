@@ -1,16 +1,18 @@
 import Phaser from 'phaser';
 import { Bullet } from './Bullet';
+import { GridUtils } from '../utils/GridUtils'; // ★修正: GridUtilsを正しくインポート
 import patternConfigData from '../config/patterns.json';
 import playerConfigData from '../config/player_config.json';
 import type { PlayerConfig, PatternConfig } from '../types/ConfigTypes';
 
 export class Player extends Phaser.GameObjects.Container {
-  // ★重要: GameSceneからの参照用に public hp を追加
-  // 歩(Index 0) = HP 1, 香(Index 1) = HP 2 ... という扱いにします
+  // GameSceneからの参照用に public hp を追加
   public hp: number = 1;
-　// ★追加: 現在のランク数値 (0:歩, 1:香, ...)
+  // 現在のランク数値 (0:歩, 1:香, ...)
   public currentRank: number = 0;
-  private bodyShape: Phaser.GameObjects.Polygon;
+  
+// ★変更: Polygon ではなく Graphics を定義
+  private bodyGraphics: Phaser.GameObjects.Graphics;
   private label: Phaser.GameObjects.Text;
   private lastFiredTime: number = 0;
   
@@ -19,7 +21,7 @@ export class Player extends Phaser.GameObjects.Container {
   private isInvincible: boolean = false;
   private bulletsGroup: Phaser.Physics.Arcade.Group;
 
-  constructor(
+constructor(
     scene: Phaser.Scene, 
     x: number, 
     y: number, 
@@ -31,27 +33,43 @@ export class Player extends Phaser.GameObjects.Container {
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
-    // HP初期化 (最初は歩なので 1)
     this.hp = 1;
-    this.currentRank = 0; // ★初期化
-    // 形状
-    const shapePoints = [0, -30, 20, -10, 15, 25, -15, 25, -20, -10];
-    this.bodyShape = scene.add.polygon(0, 0, shapePoints, 0xdeb887);
-    this.bodyShape.setStrokeStyle(2, 0x5c4033);
-    this.add(this.bodyShape);
+    this.currentRank = 0; 
+    
+    // 形状 (0,0 を中心とした座標定義)
+    // ★変更: {x, y} 配列に変更
+    const shapePoints = [
+        { x: 0, y: -25 },   // 上（尖り）
+        { x: 20, y: -18 },   // 右上
+        { x: 15, y: 10 },   // 右下
+        { x: -15, y: 10 },  // 左下
+        { x: -20, y: -18 }   // 左上
+    ];
+    // ★変更: Graphicsで描画
+    this.bodyGraphics = scene.add.graphics();
+    this.bodyGraphics.fillStyle(0xdeb887, 1);
+    this.bodyGraphics.fillPoints(shapePoints, true, true);
+    this.bodyGraphics.lineStyle(2, 0x5c4033);
+    this.bodyGraphics.strokePoints(shapePoints, true, true);
+    this.add(this.bodyGraphics);
 
-    // 文字
-    this.label = scene.add.text(-20, -20, '歩', {
+    // 文字: 中心(0, -5)に配置
+    this.label = scene.add.text(0, -5, '歩', {
       fontSize: '24px',
       color: '#000000',
       fontFamily: 'serif'
     }).setOrigin(0.5);
     this.add(this.label);
 
-    // 当たり判定のサイズ調整
+    // --- 物理設定 ---
     const body = this.body as Phaser.Physics.Arcade.Body;
-    body.setSize(30, 40);
-    body.setOffset(-35, -40); // 中心に合わせる
+    const hitBoxSize = GridUtils.CELL_SIZE * 0.8;
+
+    body.setSize(hitBoxSize, hitBoxSize*0.85);
+    
+    // ★重要修正: 純粋な中心合わせ
+    body.setOffset(-hitBoxSize / 2, -hitBoxSize / 2);
+    
     body.setCollideWorldBounds(true);
   }
 
@@ -69,9 +87,9 @@ export class Player extends Phaser.GameObjects.Container {
       this.currentPieceId = nextPiece.id;
       this.label.setText(nextPiece.name);
       
-      // ★追加: 進化したらHP（耐久力）も増やす
+      // 進化したらHP（耐久力）も増やす
       this.hp = currentIndex + 2; 
-      // ★追加: ランク更新
+      // ランク更新
       this.currentRank = currentIndex + 1;
       console.log(`Promoted to ${nextPiece.name}! (HP: ${this.hp})`);
       
@@ -91,7 +109,7 @@ export class Player extends Phaser.GameObjects.Container {
     const pointer = this.scene.input.activePointer;
     const { width, height } = this.scene.scale;
     
-    // ポインター追従 (クランプ付き)
+    // ポインター追従 (画面外に出ないようクランプ)
     this.x = Phaser.Math.Clamp(pointer.x, 20, width - 20);
     this.y = Phaser.Math.Clamp(pointer.y, 20, height - 20);
 
@@ -117,7 +135,7 @@ export class Player extends Phaser.GameObjects.Container {
   private fire(pattern: PatternConfig) {
       pattern.projectiles.forEach(proj => {
         const bullet = new Bullet(
-          this.scene, this.x - 20, this.y - 50, proj.angle, proj.speed
+          this.scene, this.x, this.y - 30, proj.angle, proj.speed // 発射位置も少し調整
         );
         this.bulletsGroup.add(bullet);
       });
@@ -133,7 +151,6 @@ export class Player extends Phaser.GameObjects.Container {
 
     // 歩(インデックス0)ならゲームオーバー
     if (currentIndex <= 0) {
-      // ★HPを0にして、GameSceneに死亡を伝える
       this.hp = 0;
       this.die();
     } else {
@@ -142,9 +159,7 @@ export class Player extends Phaser.GameObjects.Container {
       this.currentPieceId = prevPiece.id;
       this.label.setText(prevPiece.name);
       
-      // ★HPを現在のランク(インデックス+1)に合わせる
       this.hp = currentIndex; 
-      // ★追加: ランク更新 (下がる)
       this.currentRank = currentIndex - 1;      
       console.log(`Demoted to ${prevPiece.name} (HP: ${this.hp})`);
 
@@ -185,7 +200,6 @@ export class Player extends Phaser.GameObjects.Container {
     }
 
     // 2. 爆発エフェクト
-    // GameSceneで生成された 'flare' テクスチャを使用
     const emitter = this.scene.add.particles(this.x, this.y, 'flare', {
         speed: { min: 50, max: 300 },
         angle: { min: 0, max: 360 },
@@ -193,19 +207,12 @@ export class Player extends Phaser.GameObjects.Container {
         lifespan: 800,
         blendMode: 'ADD',
         quantity: 30,
-        emitting: false // 自動放出しない
+        emitting: false
     });
     
-    // 一回だけ爆発
     emitter.explode(30);
-
-    // GameScene側で hp <= 0 を検知して gameOver() が呼ばれるため、
-    // ここでのイベント発火は削除しても動きますが、念のため残しておきます。
-    // (GameSceneの作りによっては両方あると安全です)
   }
   
-  // GameSceneのリトライ機能などで色を戻す必要がある場合に備えて追加
-  public setTint(color: number) {
-      this.bodyShape.setFillStyle(color);
+  public setTint(color: number) {      
   }
 }

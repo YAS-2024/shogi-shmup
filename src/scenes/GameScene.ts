@@ -5,7 +5,7 @@ import { Bullet } from '../entities/Bullet';
 import { Item } from '../entities/Item';
 import { GridUtils } from '../utils/GridUtils';
 import { GameConfig } from '../config/GameConfig';
-import { EnemyLogic } from '../utils/EnemyLogic'; // ★追加
+import { EnemyLogic } from '../utils/EnemyLogic';
 
 import enemyConfigData from '../config/enemy_config.json';
 import waveConfigData from '../config/wave_config.json';
@@ -82,7 +82,7 @@ export class GameScene extends Phaser.Scene {
     return playerRank + this.baseDifficulty + 1;
   }
 
-  // ★修正: ターン管理ロジック (敵の連携移動)
+  // ターン管理ロジック
   private startTurnCycle() {
     const moveDuration = 2000; 
 
@@ -91,48 +91,31 @@ export class GameScene extends Phaser.Scene {
 
       // 1. 移動フェーズ開始
       this.isEnemyTurn = true;
-      this.events.emit('start-turn'); // アニメーション開始トリガー等用
+      this.events.emit('start-turn'); 
 
-      // ■■■ 全敵の移動先を一括決定するロジック ■■■
-      
-      // (1) 現在画面にいる敵を取得
+      // 全敵の移動先を一括決定するロジック
       const enemies = this.enemies.getChildren() as Enemy[];
-
-      // (2) 「下側の駒」から順に処理したいので、Y座標が大きい順(降順)にソート
-      // 前線の駒が先に場所を決め、後続の駒はその空いた場所を使えるようになる
       enemies.sort((a, b) => b.y - a.y);
 
-      // (3) 移動先予約マップ (key: "col,row")
       const reservedMap = new Set<string>();
-
-      // (4) 各敵の移動先を決定
       const moves: { enemy: Enemy, target: {col: number, row: number} }[] = [];
 
       enemies.forEach(enemy => {
           if (!enemy.active) return;
-
-          // EnemyLogicに「予約状況」を渡して、空いているベストな場所を聞く
-          // Enemy.tsで aiProfile を public にしたのでアクセス可能
           const nextGrid = EnemyLogic.decideNextGrid(
               enemy, 
               this.player, 
               enemy.aiProfile, 
               reservedMap
           );
-
-          // 自分の行き先を予約台帳に書き込む
           reservedMap.add(`${nextGrid.col},${nextGrid.row}`);
-
-          // 命令リストに追加
           moves.push({ enemy, target: nextGrid });
       });
 
-      // (5) 全員一斉に移動開始
+      // 全員一斉に移動開始
       moves.forEach(move => {
           EnemyLogic.executeMove(move.enemy, move.target, move.enemy.speed);
       });
-
-      // ■■■■■■■■■■■■■■■■■■■■■■■■■■
 
       this.time.delayedCall(moveDuration, () => {
         if (this.isGameOver) return;
@@ -165,6 +148,14 @@ export class GameScene extends Phaser.Scene {
     }
 
     const currentStage = this.getCurrentStage();
+    
+    // ゲームクリア判定
+    if (currentStage >= 15) {
+        this.stageText.setText(`STAGE 15`);
+        this.gameClear();
+        return;
+    }
+
     this.stageText.setText(`STAGE ${currentStage}`);
 
     this.waveTimer += delta;
@@ -174,21 +165,35 @@ export class GameScene extends Phaser.Scene {
       
       const currentStopDuration = Math.max(300, 1000 - (currentStage * 50));
       const oneTurnDuration = 2000 + currentStopDuration;
-      const gapSteps = 5; 
+      const gapSteps = 3; 
       this.nextWaveInterval = oneTurnDuration * gapSteps;
     }
   }
   
+  // ★修正: 難易度順にソートして上位3つから選ぶロジックに変更
   private spawnWave(difficultyLevel: number) {
     const waveRoot = waveConfigData as WaveConfigRoot;
     const enemyRoot = enemyConfigData as EnemyConfigRoot;
 
-    const availableWaves = waveRoot.waves.filter(w => w.difficulty <= difficultyLevel);
-    let candidates = availableWaves;
-    if (candidates.length === 0) candidates = waveRoot.waves.filter(w => w.difficulty === 1);
-    if (candidates.length === 0) candidates = waveRoot.waves;
+    // 1. 現在の難易度以下で出現可能なWaveを全て抽出
+    let candidates = waveRoot.waves.filter(w => w.difficulty <= difficultyLevel);
     
-    const selectedWave = candidates[Phaser.Math.Between(0, candidates.length - 1)];
+    // データがない場合の安全策
+    if (candidates.length === 0) {
+        candidates = waveRoot.waves.filter(w => w.difficulty === 1);
+    }
+    if (candidates.length === 0) {
+        candidates = waveRoot.waves;
+    }
+    
+    // 2. 難易度が高い順（降順）にソート
+    candidates.sort((a, b) => b.difficulty - a.difficulty);
+
+    // 3. 上位3つを抽出（候補が3つ未満なら全部）
+    const topCandidates = candidates.slice(0, 3);
+
+    // 4. その中からランダムに1つ選ぶ
+    const selectedWave = topCandidates[Phaser.Math.Between(0, topCandidates.length - 1)];
 
     if (!selectedWave) return;
 
@@ -204,8 +209,6 @@ export class GameScene extends Phaser.Scene {
             enemy.destinationRow = def.gridY;
 
             this.enemies.add(enemy);
-            
-            // isEnemyTurnのチェックは削除（GameSceneの一斉管理に任せるため）
         }
     });
   }
@@ -294,6 +297,21 @@ export class GameScene extends Phaser.Scene {
     this.createGameOverUI();
   }
 
+  private gameClear() {
+    if (this.isGameOver) return;
+    this.isGameOver = true;
+    this.input.setDefaultCursor('default');
+    
+    this.physics.pause();
+    this.time.removeAllEvents();
+
+    if (this.player) {
+        this.player.setTint(0xffd700); // GOLD Color
+    }
+
+    this.createGameClearUI();
+  }
+
   private createGameOverUI() {
     const { width, height } = this.scale;
     const bg = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.7);
@@ -304,15 +322,50 @@ export class GameScene extends Phaser.Scene {
     this.add.text(width / 2, height / 2 - 20, `SCORE: ${this.score}`, { fontSize: '32px', color: '#ffff00', fontFamily: 'serif' }).setOrigin(0.5).setDepth(101);
 
     const tweetBtn = this.add.text(width / 2, height / 2 + 60, '結果をツイートする', { fontSize: '24px', color: '#1DA1F2', backgroundColor: '#ffffff', padding: { x: 10, y: 10 } }).setOrigin(0.5).setDepth(101).setInteractive({ useHandCursor: true });
-    tweetBtn.on('pointerup', () => { this.tweetScore(); });
+    tweetBtn.on('pointerup', () => { this.tweetScore(false); });
 
     const retryBtn = this.add.text(width / 2, height / 2 + 130, 'もう一度遊ぶ', { fontSize: '24px', color: '#ffffff', backgroundColor: '#333333', padding: { x: 20, y: 15 } }).setOrigin(0.5).setDepth(101).setInteractive({ useHandCursor: true });
     retryBtn.on('pointerup', () => { this.scene.restart(); });
   }
 
-  private tweetScore() {
-    const text = `将棋シューティングで ${this.score} 点を獲得しました！\n迫りくる将棋の駒を撃ち落とせ！`;
-    const hashtags = '将棋シューティング,アプリコンペ';    
+  private createGameClearUI() {
+    const { width, height } = this.scale;
+    const bg = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.7);
+    bg.setDepth(100);
+    bg.setInteractive(); 
+
+    this.add.text(width / 2, height / 2 - 100, 'GAME CLEAR!!', { 
+        fontSize: '48px', 
+        color: '#ffff00', 
+        fontStyle: 'bold', 
+        fontFamily: 'serif',
+        stroke: '#ff0000',
+        strokeThickness: 4
+    }).setOrigin(0.5).setDepth(101);
+
+    this.add.text(width / 2, height / 2 - 20, `SCORE: ${this.score}`, { fontSize: '32px', color: '#ffffff', fontFamily: 'serif' }).setOrigin(0.5).setDepth(101);
+
+    const tweetBtn = this.add.text(width / 2, height / 2 + 60, 'クリアを自慢する', { 
+        fontSize: '24px', color: '#1DA1F2', backgroundColor: '#ffffff', padding: { x: 10, y: 10 } 
+    }).setOrigin(0.5).setDepth(101).setInteractive({ useHandCursor: true });
+    
+    tweetBtn.on('pointerup', () => { this.tweetScore(true); });
+
+    const retryBtn = this.add.text(width / 2, height / 2 + 130, 'もう一度遊ぶ', { 
+        fontSize: '24px', color: '#ffffff', backgroundColor: '#333333', padding: { x: 20, y: 15 } 
+    }).setOrigin(0.5).setDepth(101).setInteractive({ useHandCursor: true });
+    retryBtn.on('pointerup', () => { this.scene.restart(); });
+  }
+
+  private tweetScore(isClear: boolean = false) {
+    let text = '';
+    if (isClear) {
+        text = `将棋×STGを完全クリアしました！(SCORE: ${this.score})\n君は15ステージの猛攻に耐えられるか！？`;
+    } else {
+        text = `将棋×STGで ${this.score} 点を獲得しました！(STAGE ${this.getCurrentStage()})\n迫りくる将棋の駒を撃ち落とせ！`;
+    }
+    
+    const hashtags = '将棋×STG,アプリコンペ';    
     const url = 'https://yas-2024.github.io/shogi-shmup/'; 
     const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&hashtags=${hashtags}&url=${encodeURIComponent(url)}`;
     window.open(tweetUrl, '_blank');

@@ -33,7 +33,7 @@ export class StartScene extends Phaser.Scene {
 
 
     // --- 2. タイトルテキスト ---
-    this.add.text(width / 2, height * 0.2, 'SHOGI\nSHOOTING', {
+    this.add.text(width / 2, height * 0.2, '将棋×STG', {
       fontSize: '48px',
       color: '#ffffff',
       fontStyle: 'bold',
@@ -60,9 +60,8 @@ export class StartScene extends Phaser.Scene {
 
 【ルール】
 迫りくる将棋の駒を撃ち落とせ！
-敵を倒すと駒が進化してパワーアップ
-ダメージを受けると退化します
-「歩」の状態で被弾するとゲームオーバー
+「成」アイテムを取ってパワーアップ！
+「歩」の状態で被弾するとゲームオーバー！
     `;
     
     this.add.text(width / 2, height * 0.5, helpText.trim(), helpStyle).setOrigin(0.5);

@@ -96,7 +96,7 @@
     {
       "id": "ENEMY_OU",
       "name": "王",
-      "hp": 25,
+      "hp": 10,
       "score": 10000,
       "speed": 100,
       "texture_color": "0xE6CAA0",
