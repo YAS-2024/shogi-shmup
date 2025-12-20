@@ -1,4 +1,3 @@
-import Phaser from 'phaser';
 import { GameConfig } from '../config/GameConfig';
 
 export class GridUtils {

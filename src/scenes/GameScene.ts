@@ -31,9 +31,6 @@ export class GameScene extends Phaser.Scene {
   private scoreText!: Phaser.GameObjects.Text;
   private comboText!: Phaser.GameObjects.Text;
   private comboTimer?: Phaser.Time.TimerEvent;
-
-  private isEnemyTurn: boolean = false;
-
   constructor() {
     super('GameScene');
   }
@@ -42,7 +39,6 @@ export class GameScene extends Phaser.Scene {
     this.isGameOver = false;
     this.score = 0;
     this.combo = 0;
-    this.isEnemyTurn = false;
     
     this.waveTimer = 0;
     this.nextWaveInterval = 4000;
@@ -90,7 +86,6 @@ export class GameScene extends Phaser.Scene {
       if (this.isGameOver) return;
 
       // 1. 移動フェーズ開始
-      this.isEnemyTurn = true;
       this.events.emit('start-turn'); 
 
       // 全敵の移動先を一括決定するロジック
@@ -121,7 +116,6 @@ export class GameScene extends Phaser.Scene {
         if (this.isGameOver) return;
 
         // 2. 停止フェーズ開始
-        this.isEnemyTurn = false;
         this.events.emit('stop-turn'); 
         
         const currentStage = this.getCurrentStage();

@@ -214,5 +214,6 @@ constructor(
   }
   
   public setTint(color: number) {      
+    color
   }
 }
