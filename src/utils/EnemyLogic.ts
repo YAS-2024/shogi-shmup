@@ -5,58 +5,86 @@ import { GridUtils } from './GridUtils';
 import type { AIProfile } from '../types/ConfigTypes';
 
 export class EnemyLogic {
+  
   /**
-   * グリッドベースの移動ロジック
+   * 次の移動先グリッドを決定する（予約マップを考慮）
+   * @param reservedMap すでに他の駒が予約した座標 ("col,row" 形式の文字列Set)
    */
-  static applyMove(enemy: Enemy, player: Player | null, profile: AIProfile, baseSpeed: number) {
-    if (!enemy.active) return;
+  static decideNextGrid(
+    enemy: Enemy, 
+    player: Player | null, 
+    profile: AIProfile, 
+    reservedMap: Set<string>
+  ): { col: number, row: number } {
+    
+    if (!enemy.active) return GridUtils.pixelToGrid(enemy.x, enemy.y);
 
-    // 1. 自分の現在位置をグリッド座標に変換
     const currentGrid = GridUtils.pixelToGrid(enemy.x, enemy.y);
     let bestGrid: { col: number, row: number } | null = null;
 
-    // ■■■ 入場行進ロジック ■■■
-    // 自分の目的地(destinationRow)より手前(上)にいる場合は、
-    // まだ配置についていないので、AIを無視して強制的に「真下」へ進む
+    // ■■■ 1. 入場行進ロジック ■■■
+    // 目的地より手前なら、AI無視で「真下」を目指す
     if (currentGrid.row < enemy.destinationRow) {
-       // まだ定位置より上にいる -> 脇目も振らず真下へ
-       bestGrid = { col: currentGrid.col, row: currentGrid.row + 1 };
-    
-    } else {
-       // ■■■ 通常AIロジック ■■■
-       // 定位置に到着済み（あるいは通り過ぎた）なら、本来の動きを開始する
-
-       // 2. プレイヤーの位置（ターゲット）を取得
-       // プレイヤーが死んでいる場合は、とりあえず「画面下端の中央」を目指す
-       let targetX = enemy.scene.scale.width / 2;
-       let targetY = enemy.scene.scale.height;
-
-       if (player && player.active) {
-         targetX = player.x;
-         targetY = player.y;
+       const candidate = { col: currentGrid.col, row: currentGrid.row + 1 };
+       const key = `${candidate.col},${candidate.row}`;
+       
+       // もし前の人が詰まっていて進めないなら「その場で待機」
+       if (reservedMap.has(key)) {
+         return currentGrid;
        }
-
-       // 3. 移動パターンの候補から、ベストな移動先(グリッド)を探す
-       bestGrid = this.findBestNextGrid(currentGrid, profile.move_pattern, targetX, targetY);
+       return candidate;
     }
 
-    // 4. 移動先が決まったら、そこへ向かって移動開始 (Pixel座標に変換)
-    if (bestGrid) {
-      const targetPixel = GridUtils.gridToPixel(bestGrid.col, bestGrid.row);
-      
-      // Tweenのみで移動させます
-      this.moveByTween(enemy, targetPixel.x, targetPixel.y, baseSpeed);
+    // ■■■ 2. AI移動ロジック ■■■
+    let targetX = enemy.scene.scale.width / 2;
+    let targetY = enemy.scene.scale.height;
+    if (player && player.active) {
+       targetX = player.x;
+       targetY = player.y;
     }
+
+    // 移動候補の中からベストなものを探す（予約済みは除外）
+    bestGrid = this.findBestNextGrid(currentGrid, profile.move_pattern, targetX, targetY, reservedMap);
+
+    // 移動先がない場合は「その場に留まる」
+    return bestGrid || currentGrid;
   }
 
   /**
-   * ベストな移動先マスを探す
+   * 決定したグリッドへ実際に移動アニメーションを行う
+   */
+  static executeMove(enemy: Enemy, targetGrid: { col: number, row: number }, baseSpeed: number) {
+    if (!enemy.active) return;
+
+    const targetPixel = GridUtils.gridToPixel(targetGrid.col, targetGrid.row);
+    const body = enemy.body as Phaser.Physics.Arcade.Body;
+    if (body) body.setVelocity(0, 0);
+
+    const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, targetPixel.x, targetPixel.y);
+    
+    // 移動距離がほぼ0なら何もしない
+    if (dist < 1) return;
+
+    const duration = (dist / baseSpeed) * 1000 * 0.8; 
+
+    enemy.scene.tweens.add({
+      targets: enemy,
+      x: targetPixel.x,
+      y: targetPixel.y,
+      duration: duration,
+      ease: 'Cubic.out',
+    });
+  }
+
+  /**
+   * ベストな移動先マスを探す（予約Map対応版）
    */
   private static findBestNextGrid(
     current: { col: number, row: number },
     patterns: number[][],
     targetPixelX: number,
-    targetPixelY: number
+    targetPixelY: number,
+    reservedMap: Set<string> // ★追加
   ): { col: number, row: number } | null {
     
     let bestGrid = null;
@@ -66,57 +94,27 @@ export class EnemyLogic {
       const nextCol = current.col + pat[0];
       const nextRow = current.row + pat[1];
 
-      // 画面外（左右）に出る動きは除外
+      // 画面外（左右）は除外
       if (nextCol < 0 || nextCol >= GridUtils.COLS) continue;
 
-      // 候補マスのピクセル座標
-      const nextPixel = GridUtils.gridToPixel(nextCol, nextRow);
+      // ★重要: すでに予約されているマスは除外
+      if (reservedMap.has(`${nextCol},${nextRow}`)) continue;
 
-      // ターゲットとの距離を計算
+      const nextPixel = GridUtils.gridToPixel(nextCol, nextRow);
       const distSq = Phaser.Math.Distance.Squared(nextPixel.x, nextPixel.y, targetPixelX, targetPixelY);
 
-      // より近くなるなら更新
       if (distSq < minDistanceSq) {
         minDistanceSq = distSq;
         bestGrid = { col: nextCol, row: nextRow };
       }
     }
     
-    // 候補がなければ null を返してその場待機
     return bestGrid;
-  }
-
-  /**
-   * 物理移動ではなくTweenアニメーションで動かす（将棋っぽい挙動）
-   */
-  private static moveByTween(enemy: Enemy, targetX: number, targetY: number, speed: number) {
-    const body = enemy.body as Phaser.Physics.Arcade.Body;
-    // 物理速度は0にする（干渉しないように）
-    if (body) body.setVelocity(0, 0);
-
-    // 距離計算
-    const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, targetX, targetY);
-    if (dist < 1) return; // すでにいる
-
-    // 時間 = 距離 / 速度 * 1000
-    // 少しキビキビ動かしたいので係数を調整 (0.8倍)
-    const duration = (dist / speed) * 1000 * 0.8; 
-
-    enemy.scene.tweens.add({
-      targets: enemy,
-      x: targetX,
-      y: targetY,
-      duration: duration,
-      ease: 'Cubic.out', // すっと動いて減速して止まる
-      onComplete: () => {
-        // 到着後の処理があれば記述
-      }
-    });
   }
 
   static stop(enemy: Enemy) {
     const body = enemy.body as Phaser.Physics.Arcade.Body;
     if (body) body.setVelocity(0, 0);
-    enemy.scene.tweens.killTweensOf(enemy); // 移動アニメーションも止める
+    enemy.scene.tweens.killTweensOf(enemy);
   }
 }
